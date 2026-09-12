@@ -15,6 +15,12 @@ RUN find /opt/hermes/skills/scout -type d -exec chmod 0755 {} + \
  && find /opt/hermes/skills/scout -type f ! -name '*.py' -exec chmod 0644 {} + \
  && /opt/hermes/.venv/bin/python3 -m compileall -q /opt/hermes/skills/scout/scripts
 
+# The base image includes general-purpose productivity skills. Scout is a
+# reconnaissance-only agent, so remove them from both the initial home and the
+# bundled reconciliation source; Latch browser tools remain supplied by Hermes.
+RUN rm -rf /var/lib/hermes/skills/growth /var/lib/hermes/skills/productivity \
+ && rm -rf /opt/hermes/skills/growth /opt/hermes/skills/productivity
+
 # Fetch the official Agent Index Client at a reviewed commit and verify the
 # exact bytes before installing the root-owned unattended copy.
 COPY vendor/client.pin /opt/plow/agent-index-client.pin

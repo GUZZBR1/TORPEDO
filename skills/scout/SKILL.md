@@ -6,8 +6,11 @@ description: Reconnoiter a real digital process through Plow Latch and return an
 # Scout reconnaissance
 
 Invoke this skill when the user says "Scout this", supplies a URL to map, or
-asks what it takes to complete a digital process. Use one Scout mission only;
-do not delegate the reconnaissance to other agents.
+asks to complete, apply for, book, buy, sign up for, navigate, or understand a
+specific digital process. For a greeting or a request with no concrete process,
+give the scope-correct Scout introduction from the persona and ask for a link or
+process; do not fall back to a generic assistant capability list. Use one Scout
+mission only; do not delegate the reconnaissance to other agents.
 
 ## Durable mission first
 

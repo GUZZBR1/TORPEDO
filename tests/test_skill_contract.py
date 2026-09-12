@@ -30,6 +30,13 @@ class TestSkillContract(unittest.TestCase):
         self.assertIn("Never retrieve", compact)
         self.assertIn("persist a value", compact)
 
+    def test_ordinary_process_requests_activate_scout_without_generic_fallback(self):
+        compact = " ".join(SKILL.split())
+        for request in ("apply for", "book", "buy", "sign up for", "navigate"):
+            with self.subTest(request=request):
+                self.assertIn(request, compact)
+        self.assertIn("do not fall back to a generic assistant capability list", compact)
+
 
 if __name__ == "__main__":
     unittest.main()
