@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+# These are generic base-image skills, not Scout state. Remove any copies that
+# an existing persistent Hermes home retained before the Scout-only image ran.
+rm -rf /var/lib/hermes/skills/growth /var/lib/hermes/skills/productivity
