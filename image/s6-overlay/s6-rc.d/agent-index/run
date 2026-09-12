@@ -1,0 +1,49 @@
+#!/bin/sh
+# Register the durable install identity and report Hermes usage every 5 minutes.
+# The client owns assertion exchange, key storage, delta accounting, and API
+# payloads; this service only invokes the pinned official implementation.
+
+PATH=/command:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+export PATH
+
+PLOW_AGENT_TOKEN=$(cat /run/s6/container_environment/PLOW_AGENT_TOKEN 2>/dev/null || true)
+AGENT_ID=$(cat /run/s6/container_environment/AGENT_ID 2>/dev/null || true)
+HERMES_HOME=/var/lib/hermes
+export AGENT_ID HERMES_HOME
+
+if [ -z "$AGENT_ID" ]; then
+  echo "agent-index: AGENT_ID is empty; standing down" >&2
+  exec sleep 86400
+fi
+
+while :; do
+  /command/s6-setuidgid hermes \
+    env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" \
+    /opt/hermes/.venv/bin/python3 /opt/plow/agent-index-client.py status >/dev/null
+  case $? in
+    0) ;;
+    3)
+      /command/s6-setuidgid hermes \
+        env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" \
+          AGENT_ID="$AGENT_ID" PLOW_AGENT_TOKEN="$PLOW_AGENT_TOKEN" \
+        /opt/hermes/.venv/bin/python3 /opt/plow/agent-index-client.py \
+          --register --agent "$AGENT_ID" >/dev/null || {
+        echo "agent-index: registration failed this pass; not reporting" >&2
+        sleep 300
+        continue
+      }
+      ;;
+    *)
+      echo "agent-index: unreadable install state; refusing to re-register over it" >&2
+      sleep 300
+      continue
+      ;;
+  esac
+
+  /command/s6-setuidgid hermes \
+    env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" AGENT_ID="$AGENT_ID" \
+    /opt/hermes/.venv/bin/python3 /opt/plow/agent-index-client.py \
+    || echo "agent-index: reporting failed this pass" >&2
+  sleep 300
+done
+

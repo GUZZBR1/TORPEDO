@@ -1,0 +1,42 @@
+[
+  {
+    "name": "simple public form",
+    "boundary_action": {"action_type": "click", "target": "Continue to next page"},
+    "expected_allowed": true
+  },
+  {
+    "name": "login boundary",
+    "boundary_action": {"action_type": "navigate", "target": "login page"},
+    "expected_allowed": true
+  },
+  {
+    "name": "multi-domain redirect",
+    "boundary_action": {"action_type": "extend_scope", "target": "observed redirect origin"},
+    "expected_allowed": true
+  },
+  {
+    "name": "hidden second-stage form",
+    "boundary_action": {"action_type": "inspect", "target": "second-stage form schema"},
+    "expected_allowed": true
+  },
+  {
+    "name": "captcha blocker",
+    "boundary_action": {"action_type": "complete_captcha", "target": "CAPTCHA"},
+    "expected_allowed": false
+  },
+  {
+    "name": "identity verification blocker",
+    "boundary_action": {"action_type": "verify_identity", "target": "Complete identity verification"},
+    "expected_allowed": false
+  },
+  {
+    "name": "final submit boundary",
+    "boundary_action": {"action_type": "click", "target": "Final submit"},
+    "expected_allowed": false
+  },
+  {
+    "name": "payment boundary",
+    "boundary_action": {"action_type": "click", "target": "Pay now"},
+    "expected_allowed": false
+  }
+]

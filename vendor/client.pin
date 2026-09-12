@@ -1,0 +1,6 @@
+# Official plow-pbc/agent-index-client pin. A moving branch must never replace
+# unattended code inside an agent holding a live Plow credential.
+sha=87901f8b182a8a7c65ee3dd7267f8f835ee2a545
+sha256=c3bf54ed37aec22704b8003a7ff6385a1fd3ef49207ce55613ddc41df36a1b01
+path=standalone/agent_index_client.py
+

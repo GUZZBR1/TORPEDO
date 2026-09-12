@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+plow-credentials
+

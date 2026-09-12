@@ -1,0 +1,15 @@
+services:
+  agent:
+    build: .
+    environment:
+      # Register this exact id with the official client before expecting usage
+      # reports. Empty makes the supervised reporter stand down safely.
+      AGENT_ID: ${AGENT_ID:-}
+    volumes:
+      - ./plow-credentials:/var/lib/plow/credentials.host:ro
+      - agent-home:/var/lib/hermes
+    stop_grace_period: 35s
+
+volumes:
+  agent-home:
+
