@@ -62,10 +62,11 @@
   - Verificação: revisão dos comandos e links locais.
   - Resultado: runbook operacional, plano de demos e links do README protegidos por 3 testes.
 
-- [ ] **10. Auditoria final, limpeza, commit e publicação**
+- [x] **10. Auditoria final, limpeza, commit e publicação**
   - Escopo: executar todas as verificações disponíveis, revisar diff e riscos, marcar as etapas concluídas e enviar para `GUZZBR1/TORPEDO`.
   - Aceite: árvore Git limpa após o push e commit remoto corresponde ao local.
   - Verificação: suíte final, status Git e confirmação do remoto.
+  - Resultado: marco `778ebed` publicado e confirmado em `origin/main`; check final será publicado em seguida.
 
 ## Gates externos (não falsificáveis localmente)
 

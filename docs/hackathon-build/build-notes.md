@@ -74,3 +74,5 @@ Verificação: `python3 -m unittest tests.test_documentation -v` — 3 testes ap
 A revisão final corrigiu quatro inconsistências adicionais: `raw_user_request` agora é preservado literalmente; IDs usam ULID Crockford real; uma leitura não altera mais `updated_at`; e atualizações de fase sem mudança são recusadas em vez de criar evento falso. Duplicatas conflitantes também deixam de descartar novos valores silenciosamente.
 
 Verificações antes do primeiro push: 47 testes aprovados; `git diff --check` sem erros; compilação Python aprovada; varredura de padrões comuns de segredo sem achados; Compose válido; build final `scout:verify` aprovado; smoke test dentro da imagem aprovado.
+
+Publicação: commit de marco `778ebed1bd73c95d6a3856671f472419ef6337c6` enviado para `origin/main` e confirmado por `git ls-remote`. A etapa 10 foi marcada somente após essa confirmação; o commit seguinte persiste o check final.
