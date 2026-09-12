@@ -2,17 +2,20 @@ import sqlite3
 import unittest
 
 from tests.support import DatabaseCase
-from scout_db import ScoutError, checkpoint, create_mission, record_step, show_mission
+from scout_db import (
+    ScoutError, checkpoint, create_mission, record_blocker, record_requirement,
+    record_step, show_mission,
+)
 
 
 class TestDatabase(DatabaseCase, unittest.TestCase):
     def test_schema_and_mission_creation(self):
         mission = self.mission(target_name="Example application")
-        self.assertTrue(mission["id"].startswith("sc_"))
+        self.assertRegex(mission["id"], r"^sc_[0-9A-HJKMNP-TV-Z]{26}$")
         self.assertEqual("CREATED", mission["phase"])
         with sqlite3.connect(self.db) as conn:
             tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertTrue({"missions", "steps", "requirements", "blockers", "evidence", "mission_events"} <= tables)
+        self.assertTrue({"missions", "steps", "requirements", "blockers", "evidence", "facts", "mission_events"} <= tables)
 
     def test_checkpoint_survives_new_connection(self):
         mission = self.recon_mission()
@@ -39,6 +42,52 @@ class TestDatabase(DatabaseCase, unittest.TestCase):
         }, self.db)["mission"]
         self.assertIn("code=%5BREDACTED%5D", mission["entrypoint"])
         self.assertNotIn("private", mission["entrypoint"])
+
+    def test_raw_user_request_is_preserved_verbatim(self):
+        raw = "  Scout this exactly:\nhttps://example.test/path  "
+        mission = create_mission({"raw_user_request": raw}, self.db)["mission"]
+        self.assertEqual(raw, mission["raw_user_request"])
+
+    def test_unknown_fields_and_non_boolean_policy_are_rejected(self):
+        with self.assertRaises(ScoutError):
+            create_mission({"raw_user_request": "Scout this", "ignored": "value"}, self.db)
+        with self.assertRaises(ScoutError):
+            create_mission({
+                "raw_user_request": "Scout this",
+                "allow_authentication": "false",
+            }, self.db)
+
+    def test_failed_nested_evidence_write_rolls_back_step(self):
+        mission = self.recon_mission()
+        with self.assertRaises(ScoutError):
+            record_step({
+                "mission_id": mission["id"], "kind": "PAGE", "title": "Atomic page",
+                "url": "https://example.test/atomic", "sequence_hint": 1,
+                "evidence": [
+                    {"kind": "SCREENSHOT", "summary": "valid"},
+                    {"kind": "SCREENSHOT", "summary": "invalid", "unexpected": True},
+                ],
+            }, self.db)
+        self.assertEqual([], show_mission({"mission_id": mission["id"]}, self.db)["steps"])
+
+    def test_cross_mission_references_are_rejected(self):
+        first = self.recon_mission()
+        foreign_step = record_step({
+            "mission_id": first["id"], "kind": "PAGE", "title": "Foreign",
+            "url": "https://example.test/foreign", "sequence_hint": 1,
+            "evidence": [{"kind": "SCREENSHOT", "summary": "Foreign page"}],
+        }, self.db)
+        second = self.recon_mission()
+        with self.assertRaises(ScoutError):
+            record_requirement({
+                "mission_id": second["id"], "step_id": foreign_step["step"]["id"],
+                "name": "ID", "category": "IDENTITY", "status": "OBSERVED_REQUIRED",
+            }, self.db)
+        with self.assertRaises(ScoutError):
+            record_blocker({
+                "mission_id": second["id"], "step_id": foreign_step["step"]["id"],
+                "type": "LOGIN", "description": "Login", "recoverable": True,
+            }, self.db)
 
 
 if __name__ == "__main__":

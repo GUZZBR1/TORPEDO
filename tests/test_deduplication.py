@@ -1,7 +1,7 @@
 import unittest
 
 from tests.support import DatabaseCase
-from scout_db import record_blocker, record_requirement, record_step, show_mission
+from scout_db import ScoutError, record_blocker, record_requirement, record_step, show_mission
 
 
 class TestDeduplication(DatabaseCase, unittest.TestCase):
@@ -33,7 +33,27 @@ class TestDeduplication(DatabaseCase, unittest.TestCase):
         self.assertEqual(1, len(snapshot["requirements"]))
         self.assertEqual(1, len(snapshot["blockers"]))
 
+    def test_step_deduplication_does_not_depend_on_sequence_hint(self):
+        mission = self.recon_mission()
+        base = {
+            "mission_id": mission["id"], "kind": "PAGE", "title": "Same page",
+            "url": "https://example.test/same", "sequence_hint": 1,
+        }
+        first = record_step(base, self.db)
+        second = record_step({**base, "sequence_hint": 99}, self.db)
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+
+    def test_conflicting_duplicate_is_not_silently_discarded(self):
+        mission = self.recon_mission()
+        original = {
+            "mission_id": mission["id"], "kind": "PAGE", "title": "Same page",
+            "url": "https://example.test/same", "sequence_hint": 1,
+        }
+        record_step(original, self.db)
+        with self.assertRaises(ScoutError):
+            record_step({**original, "status": "PARTIAL"}, self.db)
+
 
 if __name__ == "__main__":
     unittest.main()
-

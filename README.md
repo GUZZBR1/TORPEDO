@@ -5,7 +5,7 @@ that uses official Plow Latch tools to inspect the user's real browser flow,
 records an evidence-backed route in SQLite, and stops before consequential or
 irreversible actions.
 
-This repository currently implements the deterministic MVP core: persona,
+This repository implements the locally verifiable MVP core: persona,
 Hermes skill contract, mission/state/process-graph persistence, deduplication,
 checkpoints, fail-closed action classification, validated reports, Docker
 scaffold, and release-gate tests.
@@ -42,6 +42,15 @@ echo '{"raw_user_request":"Scout this: https://example.com/apply","entrypoint":"
 Every script accepts a JSON object on stdin (or through `--json`) and emits JSON.
 It exits non-zero on validation, persistence, or state-transition failure.
 
+Deterministic mutation commands include:
+
+- `mission_create.py`, `mission_update.py`, and `mission_show.py`;
+- `step_record.py` and `step_link.py` for the process graph;
+- `requirement_record.py`, `blocker_record.py`, `blocker_resolve.py`, and
+  `fact_record.py` for findings and provenance;
+- `checkpoint.py`, `safety_check.py`, and `report_build.py` for durability,
+  policy, and output.
+
 ## Plow/Hermes deployment shape
 
 The image inherits from the official Plow cloud-agent base at an immutable
@@ -71,14 +80,23 @@ Register the chosen `AGENT_ID` once using the official client and your minted
 `plow-credentials`; do not hand-create install IDs or telemetry payloads.
 
 ```bash
-curl -fsS -o agent_index_client.py \
+curl -fsS -o /tmp/agent_index_client.py \
   https://raw.githubusercontent.com/plow-pbc/agent-index-client/87901f8b182a8a7c65ee3dd7267f8f835ee2a545/standalone/agent_index_client.py
-echo 'c3bf54ed37aec22704b8003a7ff6385a1fd3ef49207ce55613ddc41df36a1b01  agent_index_client.py' \
+echo 'c3bf54ed37aec22704b8003a7ff6385a1fd3ef49207ce55613ddc41df36a1b01  /tmp/agent_index_client.py' \
   | sha256sum -c -
 set -a; . ./plow-credentials; set +a
-python3 agent_index_client.py --register --agent "$AGENT_ID" \
+python3 /tmp/agent_index_client.py --register --agent "$AGENT_ID" \
   --name "Scout" --blurb "Scout goes through the digital process before you do."
 ```
+
+## Runbooks and build status
+
+- [Operations](docs/OPERATIONS.md) covers installation, lifecycle, resume,
+  safety, telemetry, and troubleshooting.
+- [Demo plan](docs/DEMO.md) defines the public, authenticated, and irreversible
+  acceptance runs without ever executing the final side effect.
+- [Build checklist](docs/hackathon-build/checklist.md) is updated only after
+  each stage passes its verification.
 
 End-to-end acceptance still requires a Mac with Plow Latch, an activated
 Plow Chat, and three real demo flows (public, authenticated, and irreversible

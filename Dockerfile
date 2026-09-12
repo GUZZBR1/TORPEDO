@@ -7,13 +7,12 @@ FROM public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-8710797b6409c77df560c6198407
 COPY --chown=0:0 runtime/persona.md /opt/hermes/plow-seed/persona.md
 RUN chmod 0644 /opt/hermes/plow-seed/persona.md
 
-# The home seed is immediately available; the bundled copy reconciles into an
-# empty or unmodified persistent home after an image update.
-COPY --chown=10000:10000 skills/scout/ /var/lib/hermes/skills/scout/
-COPY --chown=10000:10000 skills/scout/ /opt/hermes/skills/scout/
-RUN find /var/lib/hermes/skills/scout /opt/hermes/skills/scout -type d -exec chmod 0755 {} + \
- && find /var/lib/hermes/skills/scout /opt/hermes/skills/scout -type f -name '*.py' -exec chmod 0755 {} + \
- && find /var/lib/hermes/skills/scout /opt/hermes/skills/scout -type f ! -name '*.py' -exec chmod 0644 {} + \
+# Keep the immutable bundled source outside the writable Hermes home. The base
+# reconciles it into an empty or unmodified persistent home on boot.
+COPY --chown=0:0 skills/scout/ /opt/hermes/skills/scout/
+RUN find /opt/hermes/skills/scout -type d -exec chmod 0755 {} + \
+ && find /opt/hermes/skills/scout -type f -name '*.py' -exec chmod 0755 {} + \
+ && find /opt/hermes/skills/scout -type f ! -name '*.py' -exec chmod 0644 {} + \
  && /opt/hermes/.venv/bin/python3 -m compileall -q /opt/hermes/skills/scout/scripts
 
 # Fetch the official Agent Index Client at a reviewed commit and verify the
@@ -31,4 +30,3 @@ RUN set -eu; \
     chmod 0644 /opt/plow/agent-index-client.py
 
 COPY image/s6-overlay/ /etc/s6-overlay/
-

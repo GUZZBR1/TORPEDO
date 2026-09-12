@@ -1,6 +1,7 @@
 import unittest
 
 from tests.support import DatabaseCase  # noqa: F401 - installs scripts import path
+from scout_db import ScoutError
 from safety_check import classify_action
 
 
@@ -32,6 +33,25 @@ class TestSafety(unittest.TestCase):
     def test_unknown_action_fails_closed(self):
         self.assertDenied("run_magic", "continue")
 
+    def test_ambiguous_click_fails_closed(self):
+        self.assertDenied("click", "Confirm")
+
+    def test_reading_a_dangerous_control_is_allowed(self):
+        result = classify_action({"action_type": "screenshot", "target": "Final submit button"})
+        self.assertTrue(result["allowed"])
+        self.assertEqual("READ_ONLY", result["classification"])
+
+    def test_portuguese_hard_stops_are_denied(self):
+        for target in ("Pagar agora", "Aceitar os termos", "Enviar a inscrição", "Excluir conta"):
+            with self.subTest(target=target):
+                self.assertDenied("click", target)
+
+    def test_action_contract_rejects_unknown_fields_and_wrong_types(self):
+        with self.assertRaises(ScoutError):
+            classify_action({"action_type": "read", "typo": True})
+        with self.assertRaises(ScoutError):
+            classify_action({"action_type": "fill", "narrowly_justified": "yes"})
+
     def test_draft_requires_explicit_narrow_justification(self):
         self.assertFalse(classify_action({"action_type": "fill", "target": "first name"})["allowed"])
         allowed = classify_action({
@@ -39,6 +59,14 @@ class TestSafety(unittest.TestCase):
             "creates_side_effect": False,
         })
         self.assertTrue(allowed["allowed"])
+
+    def test_secret_fill_requires_user_approval(self):
+        base = {
+            "action_type": "fill_secret", "target": "password field",
+            "narrowly_justified": True, "creates_side_effect": False,
+        }
+        self.assertFalse(classify_action(base)["allowed"])
+        self.assertTrue(classify_action({**base, "user_approved": True})["allowed"])
 
 
 if __name__ == "__main__":

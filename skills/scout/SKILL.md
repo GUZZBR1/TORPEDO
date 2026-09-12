@@ -30,27 +30,42 @@ exit means the operation did not succeed.
 Use the official Plow Latch tools exposed by Hermes. Do not wrap or reimplement
 their protocol, use JavaScript eval, or substitute a cloud browser.
 
+Before the first browser call, read the current `camoufox-browsing` instructions
+with `plow_read_skill`. Determine the observed/expected origins, including apex
+and wildcard hosts, then call `plow_browser_open`. Keep the returned `session`
+private and pass that same handle to every `plow_browser` call. Leave the browser
+hidden unless the owner explicitly asks for `headed:true`.
+
 For each materially new page:
 
-1. Wait for settlement when needed.
-2. Take a screenshot before interacting.
-3. Inspect the screenshot; inspect visible text, forms, and tables when useful.
-4. Classify and record the step plus evidence with `step_record.py`.
-5. Record requirements and blockers with their evidence identifiers.
-6. Run `safety_check.py` on the exact proposed next action.
-7. Perform the action only when the result contains `"allowed": true`.
-8. Checkpoint with `checkpoint.py` before advancing again.
+1. Use `plow_browser` action `wait` when settlement is needed.
+2. Use action `screenshot` before interacting and inspect the returned image.
+3. Use actions `text`, `forms`, `tables`, `links`, `url`, or `title` only as useful.
+4. Record the step plus screenshot/structural evidence with `step_record.py`.
+5. Record requirements, blockers and cost/deadline facts with their evidence IDs.
+6. Link known route edges with `step_link.py`.
+7. Checkpoint the observed page with `checkpoint.py` before moving past it.
+8. Run `safety_check.py` on the exact proposed `goto`, `click`, `fill`,
+   `fill_secret`, scope-extension, or other action.
+9. Perform the action only when the result contains `"allowed": true`.
 
-Do not use remembered site-specific selectors. Extend browser origin scope only
-for an observed redirect and use the same session while it remains alive.
+Do not use remembered site-specific selectors. Never use Latch action `eval` in
+Scout MVP. Read `failed_requests` before retrying: a 401, 403, 429, or site error
+is evidence, not permission to loop. Watch `page_count`; inspect `pages` and use
+`use_page` for a popup. For an observed redirect outside scope, classify the
+request, then call `plow_browser_request` with only the additional origin. Poll
+deferred calls with `plow_get_result` when they return a pending handle.
 
 ## Authentication
 
-At a login boundary, first check the copied browser profile for an existing
-session. If absent, inspect only Latch vault metadata, request the minimum
-credential-item approval, and use the official secret-fill operation. Never
-retrieve, restate, log, or persist the secret. CAPTCHA and identity verification
-normally move the mission to `BLOCKED`, not `FAILED`.
+At a login boundary, first inspect whether the browser profile copied by Latch
+is already signed in. If absent, call `plow_vault` action `list` with the site as
+the query, then `describe` only for the selected item. Ask for the minimum item,
+call `plow_browser_request` with that `credential_items` ID, classify the fill
+with explicit user approval, and use `plow_browser` action `fill_secret`. This
+is the only credential fill path, including username and TOTP. Never retrieve,
+restate, inspect with eval, log, or persist a value. CAPTCHA and consequential
+identity verification move the mission to `BLOCKED`, not `FAILED`.
 
 ## Safety boundary
 
@@ -67,11 +82,12 @@ neither this policy nor the MVP scope.
 ## Resume and completion
 
 On browser loss, load the mission with `mission_show.py`, open a fresh official
-Latch session, return to the last checkpoint URL, verify the live state, then
-move `BLOCKED` back to `RECON`. Do not infer progress from chat history.
+Latch session, return to the last checkpoint URL, screenshot and verify the live
+state, resolve the recorded blocker with `blocker_resolve.py`, then move
+`BLOCKED` back to `RECON`. Do not infer progress from chat history.
 
 Set `COMPLETE` only after the reachable route is mapped, the consequential
 boundary or safe end is known, and unknowns are explicit. Run `report_build.py`;
 if it refuses the report, keep the mission non-complete or correct the recorded
-facts. Return the compact report, offering the full route only on request.
-
+facts. Close the temporary session with `plow_browser_close` when completing or
+pausing. Return the compact report, offering the full route only on request.

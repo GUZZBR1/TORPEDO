@@ -1,0 +1,25 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile deterministic scripts
+        run: python3 -m compileall -q skills/scout/scripts tests
+      - name: Run release-gate suite
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build immutable Scout image
+        run: docker build --pull -t scout:test .
