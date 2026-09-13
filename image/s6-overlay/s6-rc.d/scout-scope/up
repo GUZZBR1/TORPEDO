@@ -1,1 +1,1 @@
-/bin/rm -rf /var/lib/hermes/skills/growth /var/lib/hermes/skills/productivity
+/bin/sh /etc/s6-overlay/scripts/scout-scope.sh

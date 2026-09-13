@@ -33,6 +33,12 @@ exit means the operation did not succeed.
 Use the official Plow Latch tools exposed by Hermes. Do not wrap or reimplement
 their protocol, use JavaScript eval, or substitute a cloud browser.
 
+If the Plow tools are absent, parked, or return an availability error, do not
+substitute `web_extract`, web search, an HTTP fetch, a built-in browser, or any
+other cloud browser. Explain that Latch is unavailable and stop the
+reconnaissance. Any mission created for that request must remain non-complete;
+static content is not live UI evidence and may not be checkpointed.
+
 Before the first browser call, read the current `camoufox-browsing` instructions
 with `plow_read_skill`. Determine the observed/expected origins, including apex
 and wildcard hosts, then call `plow_browser_open`. Keep the returned `session`

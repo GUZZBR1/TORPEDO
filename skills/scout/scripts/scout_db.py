@@ -507,14 +507,21 @@ def _validate_completion(
     mission_id = mission["id"]
     if not mission["last_checkpoint_at"] or not mission["last_completed_step_id"]:
         raise ScoutError("COMPLETE requires a durable checkpoint")
-    observed_with_evidence = conn.execute(
+    observed_with_screenshot = conn.execute(
         """SELECT COUNT(*) FROM steps s
            WHERE s.mission_id=? AND s.status='OBSERVED'
-             AND EXISTS (SELECT 1 FROM evidence e WHERE e.step_id=s.id AND e.mission_id=s.mission_id)""",
+             AND EXISTS (SELECT 1 FROM evidence e
+                         WHERE e.step_id=s.id AND e.mission_id=s.mission_id
+                           AND e.kind='SCREENSHOT')""",
         (mission_id,),
     ).fetchone()[0]
-    if not observed_with_evidence:
-        raise ScoutError("COMPLETE requires an observed step with evidence")
+    observed_steps = conn.execute(
+        "SELECT COUNT(*) FROM steps WHERE mission_id=? AND status='OBSERVED'", (mission_id,)
+    ).fetchone()[0]
+    if not observed_with_screenshot:
+        raise ScoutError("COMPLETE requires an observed step with screenshot evidence")
+    if observed_with_screenshot != observed_steps:
+        raise ScoutError("COMPLETE requires screenshot evidence for every observed step")
     unresolved = conn.execute(
         "SELECT COUNT(*) FROM blockers WHERE mission_id=? AND resolved_at IS NULL", (mission_id,)
     ).fetchone()[0]
@@ -851,6 +858,13 @@ def checkpoint(data: Mapping[str, Any], path: str | os.PathLike[str] | None = No
         step = conn.execute("SELECT id FROM steps WHERE id=? AND mission_id=?", (step_id, mission_id)).fetchone()
         if step is None:
             raise ScoutError("checkpoint step does not belong to mission")
+        screenshot = conn.execute(
+            """SELECT 1 FROM evidence
+               WHERE mission_id=? AND step_id=? AND kind='SCREENSHOT' LIMIT 1""",
+            (mission_id, step_id),
+        ).fetchone()
+        if screenshot is None:
+            raise ScoutError("checkpoint requires screenshot evidence from Plow Latch")
         now = utc_now()
         conn.execute(
             """UPDATE missions SET last_checkpoint_at=?, last_completed_step_id=?, current_url=?, updated_at=?

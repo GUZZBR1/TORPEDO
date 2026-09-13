@@ -58,6 +58,29 @@ class TestStateMachine(DatabaseCase, unittest.TestCase):
         }, self.db)["mission"]
         self.assertEqual("COMPLETE", complete["phase"])
 
+    def test_checkpoint_and_completion_require_screenshot_evidence(self):
+        mission = self.recon_mission()
+        text_only = record_step({
+            "mission_id": mission["id"], "kind": "PAGE", "title": "Static fallback",
+            "url": "https://example.test/static", "sequence_hint": 1,
+            "evidence": [{"kind": "PAGE_TEXT", "summary": "Text fetched without Latch"}],
+        }, self.db)["step"]
+        with self.assertRaisesRegex(ScoutError, "screenshot"):
+            checkpoint({
+                "mission_id": mission["id"], "last_completed_step_id": text_only["id"],
+                "current_url": text_only["url"],
+            }, self.db)
+
+        observed = self.observed_step(mission)
+        checkpoint({
+            "mission_id": mission["id"], "last_completed_step_id": observed["id"],
+            "current_url": observed["url"],
+        }, self.db)
+        with self.assertRaisesRegex(ScoutError, "screenshot"):
+            update_mission({
+                "mission_id": mission["id"], "phase": "COMPLETE", "safe_end_confirmed": True,
+            }, self.db)
+
     def test_failed_requires_structured_error(self):
         mission = self.recon_mission()
         with self.assertRaises(ScoutError):

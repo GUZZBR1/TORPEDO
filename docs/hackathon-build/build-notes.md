@@ -79,7 +79,7 @@ Publicação: commit de marco `778ebed1bd73c95d6a3856671f472419ef6337c6` enviado
 
 ## 2026-09-12 — Reauditoria documental e operacional
 
-A suíte atual possui 54 testes, todos aprovados em Linux/WSL. `compileall`,
+A suíte atual possui 56 testes, todos aprovados em Linux/WSL. `compileall`,
 `docker compose config --quiet`, a construção da imagem `scout:audit` e um
 smoke test de criação de missão dentro da imagem também foram aprovados. A
 execução pelo Python nativo do Windows não é um caminho suportado para a suíte
@@ -126,3 +126,18 @@ reporter enviou um dia e duas linhas de modelo e recebeu HTTP 200. O gate de
 registro/telemetria foi fechado com essa evidência. A conexão MCP do Plow ainda
 é estacionada após três tentativas, portanto o gate Mac/Latch e as demos reais
 continuam corretamente abertos.
+
+## 2026-09-12 — Teste real de coerência pelo Plow Chat
+
+Capturas do primeiro teste mostraram que a apresentação do Scout respeitou o
+escopo geral, mas uma tentativa de reconhecimento usou `web_extract` depois que
+o MCP do Plow ficou indisponível. Outra tentativa recusou corretamente o
+fallback. Esse comportamento era incoerente com a exigência screenshot-first.
+
+O contrato e a persona agora proíbem nominalmente `web_extract`, pesquisa web,
+HTTP e browsers alternativos quando Latch não está disponível. O banco também
+recusa checkpoints sem evidência `SCREENSHOT` e impede `COMPLETE` se qualquer
+etapa observada não possuir screenshot. Por fim, o preflight s6 passa a
+substituir a cópia persistida do skill pela versão imutável da imagem em cada
+boot; isso evita que uma cópia antiga marcada como “user-modified” sobreviva à
+reconstrução e mantenha instruções obsoletas.

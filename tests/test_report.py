@@ -37,7 +37,7 @@ class TestReport(DatabaseCase, unittest.TestCase):
             "mission_id": mission["id"], "kind": "SUBMIT", "title": "final submission",
             "url": "https://example.test/grant/review", "sequence_hint": 2,
             "reversible": False, "side_effect_risk": "CONSEQUENTIAL",
-            "evidence": [{"kind": "OBSERVATION", "summary": "Final submit button visible but not clicked"}],
+            "evidence": [{"kind": "SCREENSHOT", "summary": "Final submit button visible but not clicked"}],
         }, self.db)["step"]
         checkpoint({
             "mission_id": mission["id"], "last_completed_step_id": boundary["id"],

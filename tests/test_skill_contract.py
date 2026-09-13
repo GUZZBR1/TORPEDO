@@ -37,6 +37,13 @@ class TestSkillContract(unittest.TestCase):
                 self.assertIn(request, compact)
         self.assertIn("do not fall back to a generic assistant capability list", compact)
 
+    def test_latch_failure_cannot_fall_back_to_static_web_tools(self):
+        compact = " ".join(SKILL.split())
+        for forbidden_fallback in ("web_extract", "web search", "HTTP fetch", "cloud browser"):
+            with self.subTest(forbidden_fallback=forbidden_fallback):
+                self.assertIn(forbidden_fallback, compact)
+        self.assertIn("must remain non-complete", compact)
+
 
 if __name__ == "__main__":
     unittest.main()

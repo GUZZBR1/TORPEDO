@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "image" / "s6-overlay" / "s6-rc.d" / "agent-index"
 SCOUT_SCOPE = ROOT / "image" / "s6-overlay" / "s6-rc.d" / "scout-scope"
+SCOUT_SCOPE_SCRIPT = ROOT / "image" / "s6-overlay" / "scripts" / "scout-scope.sh"
 
 
 class TestPackaging(unittest.TestCase):
@@ -58,11 +59,13 @@ class TestPackaging(unittest.TestCase):
     def test_existing_homes_are_stripped_of_generic_productivity_skills_before_gateway(self):
         self.assertEqual("oneshot", (SCOUT_SCOPE / "type").read_text().strip())
         cleanup = (SCOUT_SCOPE / "up").read_text().strip()
-        self.assertTrue(cleanup.startswith("/bin/rm -rf "))
-        self.assertNotIn("#!/bin/sh", cleanup)
-        self.assertNotIn("set -eu", cleanup)
-        self.assertIn("/var/lib/hermes/skills/growth", cleanup)
-        self.assertIn("/var/lib/hermes/skills/productivity", cleanup)
+        self.assertEqual("/bin/sh /etc/s6-overlay/scripts/scout-scope.sh", cleanup)
+        scope_script = SCOUT_SCOPE_SCRIPT.read_text()
+        self.assertIn("/var/lib/hermes/skills/scout", scope_script)
+        self.assertIn("/opt/hermes/skills/scout", scope_script)
+        self.assertIn("/var/lib/hermes/skills/growth", scope_script)
+        self.assertIn("/var/lib/hermes/skills/productivity", scope_script)
+        subprocess.run(["sh", "-n", str(SCOUT_SCOPE_SCRIPT)], check=True)
         self.assertTrue(
             (ROOT / "image" / "s6-overlay" / "s6-rc.d" / "hermes-gateway" / "dependencies.d" / "scout-scope").exists()
         )
