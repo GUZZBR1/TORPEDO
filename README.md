@@ -25,7 +25,9 @@ scaffold, and release-gate tests.
 
 ## Local verification
 
-Python 3.11+ is sufficient; the core has no third-party dependencies.
+Python 3.11+ is sufficient; the core has no third-party dependencies. Run the
+full release-gate suite on Linux (or WSL on Windows), because packaging checks
+validate POSIX `sh` scripts used by the container image.
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -95,6 +97,8 @@ python3 /tmp/agent_index_client.py --register --agent "$AGENT_ID" \
   safety, telemetry, and troubleshooting.
 - [Demo plan](docs/DEMO.md) defines the public, authenticated, and irreversible
   acceptance runs without ever executing the final side effect.
+- [Acceptance record](docs/ACCEPTANCE_RECORD.md) is the operator-safe template
+  for recording those live runs without storing credentials or private data.
 - [Build checklist](docs/hackathon-build/checklist.md) is updated only after
   each stage passes its verification.
 

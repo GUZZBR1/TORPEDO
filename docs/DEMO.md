@@ -2,6 +2,10 @@
 
 These runs require a real Plow Chat line, a connected Mac with Plow Latch, valid owner approvals, and non-sensitive targets chosen by the operator. Record screenshots only when they contain no private information.
 
+Use `docs/ACCEPTANCE_RECORD.md` to record the result of each run. A checklist
+box is not evidence by itself: include a timestamp, mission ID, redacted
+artifact reference, and concise observation for every asserted pass condition.
+
 ## Proof to collect for every run
 
 - Agent received `Scout this: <URL>` through Plow Chat.

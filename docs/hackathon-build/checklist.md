@@ -11,6 +11,7 @@
 
 - [x] **1. Reauditar especificação e implementação existente**
   - Escopo: reler `CODEX_BUILD_BRIEF.md` e `SCOUT_SPEC.md`, inspecionar todos os artefatos e executar a suíte inicial.
+  - Proveniência: os dois documentos foram fornecidos ao agente durante a construção e não fazem parte deste repositório. Uma futura reauditoria independente exige que o proprietário os forneça novamente ou arquive cópias sanitizadas.
   - Resultado: lacunas registradas em `build-notes.md`; baseline de 15 testes aprovado.
   - Verificação: `python3 -m unittest discover -s tests -v`.
 
@@ -66,7 +67,7 @@
   - Escopo: executar todas as verificações disponíveis, revisar diff e riscos, marcar as etapas concluídas e enviar para `GUZZBR1/TORPEDO`.
   - Aceite: árvore Git limpa após o push e commit remoto corresponde ao local.
   - Verificação: suíte final, status Git e confirmação do remoto.
-  - Resultado: marco `778ebed` publicado e confirmado em `origin/main`; check final será publicado em seguida.
+  - Resultado: marco `778ebed` e correções posteriores publicados; a reauditoria local de 2026-09-12 encontrou `main` limpa e alinhada com `origin/main` em `7827d66`.
 
 ## Gates externos (não falsificáveis localmente)
 
@@ -76,3 +77,7 @@ Estes itens não impedem concluir todo o trabalho executável neste computador, 
 - [ ] Reconhecimento real em um Mac conectado ao Plow Latch.
 - [ ] Registro e telemetria confirmados no serviço Agent Index.
 - [ ] Três demos reais: público, autenticado e fronteira irreversível.
+
+As evidências para fechar estes gates devem ser registradas em
+`docs/ACCEPTANCE_RECORD.md`; não marque um item apenas com base em logs locais
+ou nos testes simulados.

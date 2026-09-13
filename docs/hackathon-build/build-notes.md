@@ -76,3 +76,25 @@ A revisão final corrigiu quatro inconsistências adicionais: `raw_user_request`
 Verificações antes do primeiro push: 47 testes aprovados; `git diff --check` sem erros; compilação Python aprovada; varredura de padrões comuns de segredo sem achados; Compose válido; build final `scout:verify` aprovado; smoke test dentro da imagem aprovado.
 
 Publicação: commit de marco `778ebed1bd73c95d6a3856671f472419ef6337c6` enviado para `origin/main` e confirmado por `git ls-remote`. A etapa 10 foi marcada somente após essa confirmação; o commit seguinte persiste o check final.
+
+## 2026-09-12 — Reauditoria documental e operacional
+
+A suíte atual possui 53 testes, todos aprovados em Linux/WSL. `compileall`,
+`docker compose config --quiet`, a construção da imagem `scout:audit` e um
+smoke test de criação de missão dentro da imagem também foram aprovados. A
+execução pelo Python nativo do Windows não é um caminho suportado para a suíte
+completa porque os testes de empacotamento validam scripts POSIX com `sh`.
+
+Os requisitos originais `CODEX_BUILD_BRIEF.md` e `SCOUT_SPEC.md` foram
+fornecidos durante a construção, mas não estão versionados neste repositório.
+Essa limitação de proveniência agora está explícita no checklist. Foi criado
+`docs/ACCEPTANCE_RECORD.md` para que os quatro gates externos sejam fechados
+com evidência mínima, redigida e auditável, sem persistir segredos.
+
+O preflight do container já existente encontrou o serviço em execução, porém
+sem `AGENT_ID` configurado. O cliente oficial confirmou que a instalação ainda
+não possui chave registrada, e os logs mostraram a conexão MCP do Plow sendo
+estacionada após falhas repetidas. Nenhum gate externo foi marcado: o próximo
+operador deve configurar o ID registrado, validar a credencial oficial e a
+conexão Mac/Latch, recriar o serviço e repetir o preflight documentado em
+`docs/OPERATIONS.md`.

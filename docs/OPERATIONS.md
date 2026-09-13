@@ -3,6 +3,8 @@
 ## 1. Prerequisites
 
 - Docker with Compose.
+- Linux, or WSL when operating from Windows. The release suite validates POSIX
+  shell scripts and is not supported from native Windows Python.
 - A Plow agent line and the `plow-credentials` file minted by the official `plow-agents` flow.
 - A Mac connected through Plow Latch for live reconnaissance.
 - An Agent Index agent identifier assigned by the official client.
@@ -31,6 +33,20 @@ docker compose logs -f agent
 ```
 
 The persistent `agent-home` volume owns `$HERMES_HOME`, including `scout/scout.db` and the official Agent Index installation identity. Rebuilding the image must not delete this volume.
+
+Before starting a demo, run this preflight:
+
+```bash
+docker compose ps
+docker compose logs --tail 100 agent
+docker compose exec agent /opt/hermes/.venv/bin/python3 \
+  /opt/plow/agent-index-client.py status
+```
+
+Do not proceed when the reporter says `AGENT_ID is empty`, the client says the
+installation is not registered, or the Plow MCP connection remains parked.
+Configure the registered ID, verify the official credential flow and the active
+Mac/Latch connection, then recreate the service and repeat the preflight.
 
 ## 4. User flow in Plow Chat
 
@@ -74,6 +90,12 @@ docker compose exec agent /opt/hermes/.venv/bin/python3 \
 
 Confirmation in the remote Agent Index is an external acceptance gate; local logs alone are not proof of ingestion.
 
+Record the remote confirmation and each live demo in
+`docs/ACCEPTANCE_RECORD.md`. Store only timestamps, mission IDs, non-sensitive
+target names, redacted artifact references, and the observed pass/fail result.
+Never paste credentials, browser handles, vault values, private screenshots, or
+token-bearing URLs into the record.
+
 ## 8. Troubleshooting
 
 - Browser call blocked: report Latch's own diagnosis; do not work around the approval system.
@@ -82,3 +104,9 @@ Confirmation in the remote Agent Index is an external acceptance gate; local log
 - 401/403/429 in `failed_requests`: record evidence/blocker and avoid aggressive retries.
 - SQLite write/checkpoint failed: stop all browser actions until persistence works.
 - Agent Index state unreadable: do not re-register over it; preserve the home volume and inspect the client error.
+- `AGENT_ID is empty`: export the registered identifier in the shell that runs
+  Compose, recreate the service, and confirm the value is no longer reported as
+  empty. Do not substitute an install key or credential token for the agent ID.
+- Plow MCP repeatedly parked: confirm that the credential file came from the
+  current official flow and that the approved Mac/Latch endpoint is online;
+  keep the external gates open until a real browser call succeeds.
