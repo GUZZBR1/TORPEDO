@@ -55,7 +55,8 @@ For each materially new page:
 6. Link known route edges with `step_link.py`.
 7. Checkpoint the observed page with `checkpoint.py` before moving past it.
 8. Run `safety_check.py` on the exact proposed `goto`, `click`, `fill`,
-   `fill_secret`, scope-extension, or other action.
+   `fill_secret`, scope-extension, or other action, always including the active
+   `mission_id` so its stored permissions are enforced.
 9. Perform the action only when the result contains `"allowed": true`.
 
 Do not use remembered site-specific selectors. Never use Latch action `eval` in
@@ -84,6 +85,10 @@ submission, purchase, payment, subscription, cancellation, deletion, external
 message sending, publishing, signing, contract acceptance, legal attestation,
 or consequential identity verification. If uncertain, stop.
 
+Uploading a draft transfers owner data even when it does not submit the form.
+Require both file/form permissions and explicit user approval before classifying
+`upload_draft` as allowed.
+
 Record the boundary as a consequential `SUBMIT`, `PAYMENT`, `VERIFICATION`, or
 `OTHER` step; do not click it. A user request to "scout and submit" changes
 neither this policy nor the MVP scope.
@@ -99,4 +104,4 @@ Set `COMPLETE` only after the reachable route is mapped, the consequential
 boundary or safe end is known, and unknowns are explicit. Run `report_build.py`;
 if it refuses the report, keep the mission non-complete or correct the recorded
 facts. Close the temporary session with `plow_browser_close` when completing or
-pausing. Return the compact report, offering the full route only on request.
+pausing. Return the evidence-backed report with the ordered route.

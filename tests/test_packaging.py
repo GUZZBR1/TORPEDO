@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "image" / "s6-overlay" / "s6-rc.d" / "agent-index"
 SCOUT_SCOPE = ROOT / "image" / "s6-overlay" / "s6-rc.d" / "scout-scope"
 SCOUT_SCOPE_SCRIPT = ROOT / "image" / "s6-overlay" / "scripts" / "scout-scope.sh"
+VERIFY_WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 
 
 class TestPackaging(unittest.TestCase):
@@ -23,6 +24,28 @@ class TestPackaging(unittest.TestCase):
             (ROOT / "image" / "s6-overlay" / "s6-rc.d" / "user" / "contents.d" / "agent-index").exists()
         )
         subprocess.run(["sh", "-n", str(SERVICE / "run")], check=True)
+
+    def test_agent_index_state_is_bound_to_one_agent_id(self):
+        service = (SERVICE / "run").read_text(encoding="utf-8")
+        self.assertIn("scout-agent-id", service)
+        self.assertIn('STORED_AGENT_ID" != "$AGENT_ID', service)
+        self.assertIn("AGENT_INDEX_ADOPT_EXISTING_STATE", service)
+        self.assertIn("registered state predates the durable AGENT_ID binding", service)
+        registration = service.index("--register --agent")
+        self.assertGreater(service.index("write_agent_binding ||", registration), registration)
+
+    def test_ci_actions_are_immutable_and_container_boot_is_smoke_tested(self):
+        workflow = VERIFY_WORKFLOW.read_text(encoding="utf-8")
+        action_uses = re.findall(r"(?m)^\s*- uses:\s*([^\s#]+)", workflow)
+        self.assertGreaterEqual(len(action_uses), 2)
+        for action in action_uses:
+            with self.subTest(action=action):
+                self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
+        self.assertIn("docker run --detach", workflow)
+        self.assertIn("service scout-scope successfully started", workflow)
+        self.assertIn("service dashboard successfully started", workflow)
+        self.assertIn("unable to start service", workflow)
+        self.assertIn("agent-index-client.py --self-check", workflow)
 
     def test_client_and_base_are_immutable_and_checked(self):
         pin = (ROOT / "vendor" / "client.pin").read_text()

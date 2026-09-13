@@ -8,27 +8,110 @@ export PATH
 
 PLOW_AGENT_TOKEN=$(cat /run/s6/container_environment/PLOW_AGENT_TOKEN 2>/dev/null || true)
 AGENT_ID=$(cat /run/s6/container_environment/AGENT_ID 2>/dev/null || true)
+AGENT_INDEX_ADOPT_EXISTING_STATE=$(
+  cat /run/s6/container_environment/AGENT_INDEX_ADOPT_EXISTING_STATE 2>/dev/null || true
+)
 HERMES_HOME=/var/lib/hermes
 export AGENT_ID HERMES_HOME
+AGENT_BINDING_PATH=$HERMES_HOME/.agent-index/scout-agent-id
 
 if [ -z "$AGENT_ID" ]; then
   echo "agent-index: AGENT_ID is empty; standing down" >&2
   exec sleep 86400
 fi
 
+case "$AGENT_ID" in
+  *'
+'*)
+    echo "agent-index: AGENT_ID must be a single line; standing down" >&2
+    exec sleep 86400
+    ;;
+esac
+
+read_agent_binding() {
+  if [ ! -e "$AGENT_BINDING_PATH" ]; then
+    return 1
+  fi
+  STORED_AGENT_ID=$(cat "$AGENT_BINDING_PATH") || {
+    echo "agent-index: cannot read durable agent binding; refusing to report" >&2
+    return 2
+  }
+  if [ -z "$STORED_AGENT_ID" ]; then
+    echo "agent-index: durable agent binding is empty; refusing to report" >&2
+    return 2
+  fi
+  if [ "$STORED_AGENT_ID" != "$AGENT_ID" ]; then
+    echo "agent-index: AGENT_ID '$AGENT_ID' does not match durable binding '$STORED_AGENT_ID'; refusing to report" >&2
+    return 2
+  fi
+  return 0
+}
+
+write_agent_binding() {
+  /command/s6-setuidgid hermes \
+    env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" AGENT_ID="$AGENT_ID" \
+    sh -c '
+      set -eu
+      directory="$HERMES_HOME/.agent-index"
+      destination="$directory/scout-agent-id"
+      temporary="$destination.$$.tmp"
+      umask 077
+      mkdir -p "$directory"
+      trap '\''rm -f "$temporary"'\'' EXIT HUP INT TERM
+      printf "%s\n" "$AGENT_ID" >"$temporary"
+      mv "$temporary" "$destination"
+      trap - EXIT HUP INT TERM
+    '
+}
+
 while :; do
   /command/s6-setuidgid hermes \
     env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" \
     /opt/hermes/.venv/bin/python3 /opt/plow/agent-index-client.py status >/dev/null
   case $? in
-    0) ;;
+    0)
+      read_agent_binding
+      case $? in
+        0) ;;
+        1)
+          if [ "$AGENT_INDEX_ADOPT_EXISTING_STATE" != "1" ]; then
+            echo "agent-index: registered state predates the durable AGENT_ID binding; set AGENT_INDEX_ADOPT_EXISTING_STATE=1 once to adopt it explicitly" >&2
+            sleep 300
+            continue
+          fi
+          write_agent_binding || {
+            echo "agent-index: could not persist adopted AGENT_ID binding" >&2
+            sleep 300
+            continue
+          }
+          ;;
+        *)
+          sleep 300
+          continue
+          ;;
+      esac
+      ;;
     3)
+      read_agent_binding
+      case $? in
+        0) ;;
+        1) ;;
+        *)
+          sleep 300
+          continue
+          ;;
+      esac
       /command/s6-setuidgid hermes \
         env HOME="$HERMES_HOME" HERMES_HOME="$HERMES_HOME" \
           AGENT_ID="$AGENT_ID" PLOW_AGENT_TOKEN="$PLOW_AGENT_TOKEN" \
         /opt/hermes/.venv/bin/python3 /opt/plow/agent-index-client.py \
           --register --agent "$AGENT_ID" >/dev/null || {
         echo "agent-index: registration failed this pass; not reporting" >&2
+        sleep 300
+        continue
+      }
+      write_agent_binding || {
+        echo "agent-index: registered but could not persist AGENT_ID binding; not reporting" >&2
         sleep 300
         continue
       }
@@ -46,4 +129,3 @@ while :; do
     || echo "agent-index: reporting failed this pass" >&2
   sleep 300
 done
-

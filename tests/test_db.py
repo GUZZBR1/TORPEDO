@@ -1,5 +1,7 @@
 import sqlite3
+import stat
 import unittest
+from pathlib import Path
 
 from tests.support import DatabaseCase
 from scout_db import (
@@ -42,6 +44,35 @@ class TestDatabase(DatabaseCase, unittest.TestCase):
         }, self.db)["mission"]
         self.assertIn("code=%5BREDACTED%5D", mission["entrypoint"])
         self.assertNotIn("private", mission["entrypoint"])
+        redacted = create_mission({
+            "raw_user_request": (
+                "password is correct horse battery staple; open "
+                "https://alice:secret@example.test/callback?code=private"
+                "; Authorization: Bearer abcdefghijklmnop"
+            ),
+        }, self.db)["mission"]["raw_user_request"]
+        self.assertNotIn("correct horse battery staple", redacted)
+        self.assertNotIn("alice:secret", redacted)
+        self.assertNotIn("private", redacted)
+        self.assertNotIn("abcdefghijklmnop", redacted)
+        pem_redacted = create_mission({
+            "raw_user_request": (
+                "Scout this\n-----BEGIN PRIVATE KEY-----\nvery-secret-material\n"
+                "-----END PRIVATE KEY-----"
+            ),
+        }, self.db)["mission"]["raw_user_request"]
+        self.assertNotIn("very-secret-material", pem_redacted)
+        with self.assertRaisesRegex(ScoutError, "userinfo"):
+            create_mission({
+                "raw_user_request": "Scout this portal",
+                "entrypoint": "https://alice:secret@example.test/start",
+            }, self.db)
+
+    def test_database_permissions_are_private(self):
+        self.mission()
+        db_path = Path(self.db)
+        self.assertEqual(0o600, stat.S_IMODE(db_path.stat().st_mode))
+        self.assertEqual(0o700, stat.S_IMODE(db_path.parent.stat().st_mode))
 
     def test_raw_user_request_is_preserved_verbatim(self):
         raw = "  Scout this exactly:\nhttps://example.test/path  "
@@ -69,6 +100,18 @@ class TestDatabase(DatabaseCase, unittest.TestCase):
                 ],
             }, self.db)
         self.assertEqual([], show_mission({"mission_id": mission["id"]}, self.db)["steps"])
+
+    def test_evidence_timestamp_requires_iso_timezone(self):
+        mission = self.recon_mission()
+        with self.assertRaisesRegex(ScoutError, "timezone"):
+            record_step({
+                "mission_id": mission["id"], "kind": "PAGE", "title": "Timestamp",
+                "url": "https://example.test/time", "sequence_hint": 1,
+                "evidence": [{
+                    "kind": "SCREENSHOT", "summary": "Page visible",
+                    "captured_at": "2026-09-12T12:00:00",
+                }],
+            }, self.db)
 
     def test_cross_mission_references_are_rejected(self):
         first = self.recon_mission()

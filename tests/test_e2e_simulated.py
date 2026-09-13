@@ -56,6 +56,10 @@ class TestSimulatedEndToEnd(DatabaseCase, unittest.TestCase):
         resolve_blocker({"mission_id": mission["id"], "blocker_id": blocker["id"]}, self.db)
         update_mission({"mission_id": mission["id"], "phase": "RECON"}, self.db)
         portal = self.step(mission["id"], "Portal", 2)
+        link_steps({
+            "mission_id": mission["id"], "from_step_id": auth["step"]["id"],
+            "to_step_id": portal["step"]["id"],
+        }, self.db)
         self.requirement(mission["id"], portal)
         update_mission({
             "mission_id": mission["id"], "phase": "COMPLETE", "safe_end_confirmed": True,
@@ -70,6 +74,10 @@ class TestSimulatedEndToEnd(DatabaseCase, unittest.TestCase):
         boundary = self.step(
             mission["id"], "Pay now", 2, kind="PAYMENT", risk="CONSEQUENTIAL"
         )
+        link_steps({
+            "mission_id": mission["id"], "from_step_id": start["step"]["id"],
+            "to_step_id": boundary["step"]["id"],
+        }, self.db)
         action = classify_action({"action_type": "click", "target": "Pay now"})
         self.assertFalse(action["allowed"])
         update_mission({"mission_id": mission["id"], "phase": "COMPLETE"}, self.db)

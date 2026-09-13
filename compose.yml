@@ -5,6 +5,9 @@ services:
       # Register this exact id with the official client before expecting usage
       # reports. Empty makes the supervised reporter stand down safely.
       AGENT_ID: ${AGENT_ID:-scout}
+      # Set to 1 for exactly one upgrade boot when adopting a volume created
+      # before durable AGENT_ID bindings existed; remove it after the marker is written.
+      AGENT_INDEX_ADOPT_EXISTING_STATE: ${AGENT_INDEX_ADOPT_EXISTING_STATE:-0}
     volumes:
       - ./plow-credentials:/var/lib/plow/credentials.host:ro
       - agent-home:/var/lib/hermes

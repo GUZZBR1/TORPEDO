@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -59,7 +60,24 @@ SECRET_FIELD_NAMES = {
 }
 SENSITIVE_URL_KEYS = SECRET_FIELD_NAMES | {
     "authorization", "auth", "code", "credential", "session", "session_id", "sid",
+    "key", "sig", "signature", "jwt", "id_token", "state",
 }
+
+SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(password|passwd|passphrase|secret|token|access[_ -]?token|refresh[_ -]?token|"
+    r"api[_ -]?key|authorization|bearer|otp|pin|cvv|cvc)\b(\s*(?:is|[:=])\s*)([^\n,;]+)"
+)
+URL_USERINFO_RE = re.compile(r"(?i)(https?://)([^/\s@]+)@")
+URL_SECRET_PARAM_RE = re.compile(
+    r"(?i)([?&#](?:password|passwd|passphrase|secret|token|access_token|refresh_token|"
+    r"api_key|authorization|auth|code|credential|session|session_id|sid|key|sig|signature|"
+    r"jwt|id_token|state)=)([^&#\s]+)"
+)
+BEARER_TOKEN_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
+PRIVATE_KEY_BLOCK_RE = re.compile(
+    r"-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----.*?-----END \1-----", re.DOTALL
+)
+PRIVATE_KEY_HEADER_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
 
 
 SCHEMA = """
@@ -92,6 +110,7 @@ CREATE TABLE IF NOT EXISTS missions (
     external_domains INTEGER NOT NULL DEFAULT 0,
     error_code TEXT,
     error_message TEXT,
+    safe_end_confirmed INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (last_completed_step_id) REFERENCES steps(id)
 );
 
@@ -214,11 +233,18 @@ def database_path(explicit: str | os.PathLike[str] | None = None) -> Path:
 
 def _connect(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     resolved = database_path(path)
-    resolved.parent.mkdir(parents=True, exist_ok=True)
+    parent_existed = resolved.parent.exists()
+    resolved.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not parent_existed or resolved.parent.name == "scout":
+        os.chmod(resolved.parent, 0o700)
     conn = sqlite3.connect(resolved, timeout=10)
+    os.chmod(resolved, 0o600)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    for sidecar in (Path(f"{resolved}-wal"), Path(f"{resolved}-shm")):
+        if sidecar.exists():
+            os.chmod(sidecar, 0o600)
     conn.execute("PRAGMA busy_timeout = 10000")
     # sqlite3.executescript() commits an open transaction. Initialize/migrate
     # the schema before BEGIN so every handler body remains one atomic unit.
@@ -226,6 +252,11 @@ def _connect(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     blocker_columns = {row[1] for row in conn.execute("PRAGMA table_info(blockers)")}
     if "resolved_at" not in blocker_columns:
         conn.execute("ALTER TABLE blockers ADD COLUMN resolved_at TEXT")
+    mission_columns = {row[1] for row in conn.execute("PRAGMA table_info(missions)")}
+    if "safe_end_confirmed" not in mission_columns:
+        conn.execute(
+            "ALTER TABLE missions ADD COLUMN safe_end_confirmed INTEGER NOT NULL DEFAULT 0"
+        )
     conn.commit()
     return conn
 
@@ -298,6 +329,8 @@ def _validate_url(value: str | None, name: str = "url") -> str | None:
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ScoutError(f"{name} must be an http(s) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ScoutError(f"{name} must not contain URL userinfo credentials")
     # Keep route context while ensuring copied callback/session URLs cannot put
     # credentials into durable mission state.
     query = []
@@ -310,6 +343,17 @@ def _validate_url(value: str | None, name: str = "url") -> str | None:
     return urlunparse(parsed._replace(query=urlencode(query), fragment=fragment))
 
 
+def _redact_sensitive_text(value: str) -> str:
+    value = PRIVATE_KEY_BLOCK_RE.sub("[REDACTED PRIVATE KEY]", value)
+    if PRIVATE_KEY_HEADER_RE.search(value):
+        raise ScoutError("raw_user_request contains an incomplete private key")
+    value = BEARER_TOKEN_RE.sub("Bearer [REDACTED]", value)
+    value = SECRET_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", value)
+    value = URL_SECRET_PARAM_RE.sub(r"\1[REDACTED]", value)
+    value = URL_USERINFO_RE.sub(r"\1[REDACTED]@", value)
+    return value
+
+
 def _validate_no_secret_fields(value: Any, path: str = "input") -> None:
     if isinstance(value, Mapping):
         for key, child in value.items():
@@ -320,6 +364,14 @@ def _validate_no_secret_fields(value: Any, path: str = "input") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _validate_no_secret_fields(child, f"{path}[{index}]")
+    elif isinstance(value, str):
+        if (
+            SECRET_ASSIGNMENT_RE.search(value)
+            or URL_USERINFO_RE.search(value)
+            or BEARER_TOKEN_RE.search(value)
+            or PRIVATE_KEY_HEADER_RE.search(value)
+        ):
+            raise ScoutError(f"secret-bearing value is forbidden: {path}")
 
 
 def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -395,9 +447,14 @@ def create_mission(data: Mapping[str, Any], path: str | os.PathLike[str] | None 
         "raw_user_request", "entrypoint", "target_name", "allow_authentication",
         "allow_navigation", "allow_file_lookup", "allow_form_draft",
     })
-    _validate_no_secret_fields(data)
-    raw_request = _require_verbatim_text("raw_user_request", data.get("raw_user_request"))
+    raw_request = _redact_sensitive_text(
+        _require_verbatim_text("raw_user_request", data.get("raw_user_request"))
+    )
     entrypoint = _validate_url(data.get("entrypoint"), "entrypoint")
+    sanitized_input = dict(data)
+    sanitized_input.pop("raw_user_request", None)
+    sanitized_input.pop("entrypoint", None)
+    _validate_no_secret_fields(sanitized_input)
     target_name = _optional_text("target_name", data.get("target_name"))
     policies = {
         name: _require_bool(name, data.get(name, default))
@@ -455,7 +512,7 @@ def update_mission(data: Mapping[str, Any], path: str | os.PathLike[str] | None 
                 if not open_blockers:
                     raise ScoutError("BLOCKED requires an unresolved blocker")
             if current_phase == "BLOCKED" and next_phase == "RECON":
-                if not current["last_checkpoint_at"]:
+                if not current["last_checkpoint_at"] and current["total_steps"]:
                     raise ScoutError("resuming from BLOCKED requires a durable checkpoint")
                 open_blockers = conn.execute(
                     "SELECT COUNT(*) FROM blockers WHERE mission_id=? AND resolved_at IS NULL",
@@ -465,6 +522,7 @@ def update_mission(data: Mapping[str, Any], path: str | os.PathLike[str] | None 
                     raise ScoutError("resuming from BLOCKED requires blockers to be resolved")
             if next_phase == "COMPLETE" and next_phase != current_phase:
                 _validate_completion(conn, current, safe_end_confirmed)
+                updates["safe_end_confirmed"] = int(safe_end_confirmed)
             if next_phase == "FAILED" and next_phase != current_phase:
                 error_code = data.get("error_code") or current["error_code"]
                 error_message = data.get("error_message") or current["error_message"]
@@ -528,7 +586,12 @@ def _validate_completion(
     if unresolved:
         raise ScoutError("COMPLETE cannot contain unresolved blockers")
     boundary = conn.execute(
-        "SELECT COUNT(*) FROM steps WHERE mission_id=? AND side_effect_risk='CONSEQUENTIAL'",
+        """SELECT COUNT(*) FROM steps s
+           WHERE s.mission_id=? AND s.status='OBSERVED'
+             AND s.side_effect_risk='CONSEQUENTIAL' AND s.reversible=0
+             AND EXISTS (SELECT 1 FROM evidence e
+                         WHERE e.step_id=s.id AND e.mission_id=s.mission_id
+                           AND e.kind='SCREENSHOT')""",
         (mission_id,),
     ).fetchone()[0]
     if not boundary and not safe_end_confirmed:
@@ -542,6 +605,60 @@ def _validate_completion(
     findings = [row["status"] for row in requirement_findings] + [row["status"] for row in fact_findings]
     if findings and not any(status in {"OBSERVED_REQUIRED", "OBSERVED"} for status in findings):
         raise ScoutError("COMPLETE requires at least one observed finding when findings exist")
+    unproven_requirements = conn.execute(
+        """SELECT COUNT(*) FROM requirements
+           WHERE mission_id=? AND status='OBSERVED_REQUIRED' AND evidence_id IS NULL""",
+        (mission_id,),
+    ).fetchone()[0]
+    if unproven_requirements:
+        raise ScoutError("COMPLETE requires evidence for every observed requirement")
+    rows = conn.execute(
+        "SELECT id,next_step_ids_json FROM steps WHERE mission_id=?", (mission_id,)
+    ).fetchall()
+    if rows:
+        step_ids = {row["id"] for row in rows}
+        incoming = {step_id: 0 for step_id in step_ids}
+        adjacency: dict[str, list[str]] = {}
+        for row in rows:
+            targets = json.loads(row["next_step_ids_json"])
+            adjacency[row["id"]] = targets
+            for target in targets:
+                if target in incoming:
+                    incoming[target] += 1
+        roots = [step_id for step_id, count in incoming.items() if count == 0]
+        if len(roots) != 1:
+            raise ScoutError("COMPLETE requires one connected route root")
+        reached: set[str] = set()
+        pending = [roots[0]]
+        while pending:
+            step_id = pending.pop()
+            if step_id in reached:
+                continue
+            reached.add(step_id)
+            pending.extend(adjacency.get(step_id, []))
+        if reached != step_ids:
+            raise ScoutError("COMPLETE requires every step to be reachable from the route root")
+        remaining_incoming = dict(incoming)
+        ready = [step_id for step_id, count in remaining_incoming.items() if count == 0]
+        ordered = 0
+        while ready:
+            step_id = ready.pop()
+            ordered += 1
+            for target in adjacency.get(step_id, []):
+                remaining_incoming[target] -= 1
+                if remaining_incoming[target] == 0:
+                    ready.append(target)
+        if ordered != len(step_ids):
+            raise ScoutError("COMPLETE requires an acyclic route graph")
+    checkpoint_step = _owned_step(conn, mission_id, mission["last_completed_step_id"])
+    if json.loads(checkpoint_step["next_step_ids_json"]):
+        raise ScoutError("COMPLETE requires the durable checkpoint to be a terminal route step")
+    if not safe_end_confirmed and not (
+        checkpoint_step["status"] == "OBSERVED"
+        and checkpoint_step["side_effect_risk"] == "CONSEQUENTIAL"
+        and not checkpoint_step["reversible"]
+    ):
+        raise ScoutError("COMPLETE requires the checkpoint at the observed consequential boundary")
 
 
 def _fingerprint(*values: Any) -> str:
@@ -582,6 +699,12 @@ def record_evidence(
     source_url = _validate_url(data.get("source_url"), "evidence.source_url")
     artifact_path = _optional_text("evidence.artifact_path", data.get("artifact_path"))
     captured_at = _optional_text("evidence.captured_at", data.get("captured_at")) or utc_now()
+    try:
+        parsed_captured_at = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ScoutError("evidence.captured_at must be an ISO-8601 timestamp") from exc
+    if parsed_captured_at.tzinfo is None:
+        raise ScoutError("evidence.captured_at must include a timezone")
     dedupe_key = _fingerprint(step_id, kind, source_url, summary, artifact_path)
     existing = conn.execute(
         "SELECT id FROM evidence WHERE mission_id = ? AND dedupe_key = ?", (mission_id, dedupe_key)
@@ -613,7 +736,7 @@ def record_step(data: Mapping[str, Any], path: str | os.PathLike[str] | None = N
     status = _require_choice("status", data.get("status", "OBSERVED"), STEP_STATUSES)
     risk = _require_choice("side_effect_risk", data.get("side_effect_risk", "NONE"), SIDE_EFFECT_RISKS)
     sequence_hint = data.get("sequence_hint")
-    if not isinstance(sequence_hint, int) or sequence_hint < 0:
+    if isinstance(sequence_hint, bool) or not isinstance(sequence_hint, int) or sequence_hint < 0:
         raise ScoutError("sequence_hint must be a non-negative integer")
     reversible = _require_bool("reversible", data.get("reversible", True))
     next_steps = data.get("next_step_ids", [])
@@ -625,7 +748,8 @@ def record_step(data: Mapping[str, Any], path: str | os.PathLike[str] | None = N
     custom_dedupe = data.get("dedupe_key")
     if custom_dedupe is not None:
         custom_dedupe = _require_text("dedupe_key", custom_dedupe)
-    dedupe_key = custom_dedupe or _fingerprint(kind, title, url)
+    legacy_dedupe_key = _fingerprint(kind, title, url)
+    dedupe_key = custom_dedupe or _fingerprint(kind, title, url, sequence_hint)
     with transaction(path) as conn:
         mission = _mission(conn, mission_id)
         if mission["phase"] not in {"RECON", "BLOCKED"}:
@@ -635,6 +759,14 @@ def record_step(data: Mapping[str, Any], path: str | os.PathLike[str] | None = N
         existing = conn.execute(
             "SELECT * FROM steps WHERE mission_id=? AND dedupe_key=?", (mission_id, dedupe_key)
         ).fetchone()
+        if existing is None and custom_dedupe is None:
+            existing = conn.execute(
+                """SELECT * FROM steps
+                   WHERE mission_id=? AND dedupe_key=? AND sequence_hint=?""",
+                (mission_id, legacy_dedupe_key, sequence_hint),
+            ).fetchone()
+            if existing is not None:
+                conn.execute("UPDATE steps SET dedupe_key=? WHERE id=?", (dedupe_key, existing["id"]))
         created = existing is None
         if created:
             step_id = new_id("step")
@@ -648,9 +780,24 @@ def record_step(data: Mapping[str, Any], path: str | os.PathLike[str] | None = N
             step_id = existing["id"]
             _reject_conflict(existing, {
                 "kind": kind, "title": title, "url": url, "domain": domain,
-                "status": status, "reversible": int(reversible), "side_effect_risk": risk,
-                "next_step_ids_json": json.dumps(next_steps, separators=(",", ":")),
             }, "step")
+            status_changed = existing["status"] != status
+            if status_changed and status != "OBSERVED":
+                raise ScoutError("step status may only advance to OBSERVED")
+            risk_rank = {"NONE": 0, "LOW": 1, "CONSEQUENTIAL": 2}
+            if risk_rank[risk] < risk_rank[existing["side_effect_risk"]]:
+                raise ScoutError("step side_effect_risk cannot be downgraded")
+            if not existing["reversible"] and reversible:
+                raise ScoutError("an irreversible step cannot become reversible")
+            merged_links = list(dict.fromkeys(json.loads(existing["next_step_ids_json"]) + next_steps))
+            conn.execute(
+                """UPDATE steps SET status=?, reversible=?, side_effect_risk=?, next_step_ids_json=?
+                   WHERE id=?""",
+                (status, int(existing["reversible"] and reversible), risk,
+                 json.dumps(merged_links, separators=(",", ":")), step_id),
+            )
+            if status_changed or risk != existing["side_effect_risk"] or int(reversible) != existing["reversible"]:
+                _event(conn, mission_id, "STEP_UPDATED", {"step_id": step_id})
         evidence_ids: list[str] = []
         evidence_created = 0
         for evidence in evidence_inputs:
@@ -705,6 +852,8 @@ def record_requirement(data: Mapping[str, Any], path: str | os.PathLike[str] | N
     step_id = data.get("step_id")
     details = _optional_text("details", data.get("details"))
     evidence_id = data.get("evidence_id")
+    if status == "OBSERVED_REQUIRED" and evidence_id is None:
+        raise ScoutError("observed requirement requires evidence_id")
     dedupe_key = _fingerprint(mission_id, category, name, step_id)
     with transaction(path) as conn:
         mission = _mission(conn, mission_id)
@@ -729,9 +878,22 @@ def record_requirement(data: Mapping[str, Any], path: str | os.PathLike[str] | N
         else:
             requirement_id = existing["id"]
             _reject_conflict(existing, {
-                "step_id": step_id, "name": name, "category": category, "status": status,
-                "details": details, "evidence_id": evidence_id,
+                "step_id": step_id, "name": name, "category": category,
             }, "requirement")
+            if existing["status"] == status:
+                _reject_conflict(existing, {
+                    "details": details, "evidence_id": evidence_id,
+                }, "requirement")
+            elif status != "OBSERVED_REQUIRED":
+                raise ScoutError("requirement status may only advance to OBSERVED_REQUIRED")
+            if existing["status"] == "OBSERVED_REQUIRED" and status != existing["status"]:
+                raise ScoutError("observed requirement status cannot be downgraded")
+            if existing["status"] != status:
+                conn.execute(
+                    "UPDATE requirements SET status=?,details=?,evidence_id=? WHERE id=?",
+                    (status, details, evidence_id, requirement_id),
+                )
+                _event(conn, mission_id, "REQUIREMENT_UPDATED", {"requirement_id": requirement_id})
         _refresh_summary(conn, mission_id)
         result = _row(conn.execute("SELECT * FROM requirements WHERE id=?", (requirement_id,)).fetchone())
     return {"ok": True, "created": created, "requirement": result}
@@ -838,9 +1000,22 @@ def record_fact(data: Mapping[str, Any], path: str | os.PathLike[str] | None = N
         else:
             fact_id = existing["id"]
             _reject_conflict(existing, {
-                "step_id": step_id, "type": fact_type, "name": name, "value": value,
-                "status": status, "details": details, "evidence_id": evidence_id,
+                "step_id": step_id, "type": fact_type, "name": name,
             }, "fact")
+            if existing["status"] == status:
+                _reject_conflict(existing, {
+                    "value": value, "details": details, "evidence_id": evidence_id,
+                }, "fact")
+            elif status != "OBSERVED":
+                raise ScoutError("fact status may only advance to OBSERVED")
+            if existing["status"] == "OBSERVED" and status != existing["status"]:
+                raise ScoutError("observed fact status cannot be downgraded")
+            if existing["status"] != status:
+                conn.execute(
+                    "UPDATE facts SET value=?,status=?,details=?,evidence_id=? WHERE id=?",
+                    (value, status, details, evidence_id, fact_id),
+                )
+                _event(conn, mission_id, "FACT_UPDATED", {"fact_id": fact_id, "type": fact_type})
         result = _row(conn.execute("SELECT * FROM facts WHERE id=?", (fact_id,)).fetchone())
     return {"ok": True, "created": created, "fact": result}
 

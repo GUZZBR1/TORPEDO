@@ -14,7 +14,7 @@ class TestSkillContract(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(f"`{name}`", SKILL)
-        for action in ("screenshot", "text", "forms", "tables", "fill_secret", "use_page"):
+        for action in ("goto", "screenshot", "text", "forms", "tables", "fill_secret", "use_page"):
             with self.subTest(action=action):
                 self.assertIn(f"`{action}`", SKILL)
 
@@ -22,6 +22,7 @@ class TestSkillContract(unittest.TestCase):
         screenshot = SKILL.index("action `screenshot` before interacting")
         proposed_action = SKILL.index("Run `safety_check.py` on the exact proposed")
         self.assertLess(screenshot, proposed_action)
+        self.assertIn("including the active `mission_id`", " ".join(SKILL.split()))
         self.assertIn("Never use Latch action `eval`", SKILL)
 
     def test_vault_values_never_enter_model_or_database(self):
