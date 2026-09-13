@@ -17,9 +17,9 @@ known to contain no personal or secret information.
 
 ## Environment
 
-- Date/time (UTC):
+- Date/time (UTC): 2026-09-13T01:15:23Z
 - Operator:
-- Registered `AGENT_ID` (identifier only, no token):
+- Registered `AGENT_ID` (identifier only, no token): `scout`
 - Plow Chat line:
 - Mac/Latch connected: [ ]
 - Non-sensitive test account prepared, if required: [ ]
@@ -45,11 +45,19 @@ known to contain no personal or secret information.
 
 ### Agent Index ingestion
 
+- Status: [x] PASS  [ ] FAIL
+- Local client status successful: [x]
+- Remote official view confirmed: [x]
+- Timestamp visible in remote view (UTC): 2026-09-13T01:15:23Z
+- Observation: the supervised reporter posted one day and two model rows for `scout`; the service returned HTTP 200 and the public agent API returned the registered metadata.
+- Redacted artifact reference: https://aiworthusing.com/agent-index/scout
+
+### Agent Index verification
+
 - Status: [ ] PASS  [ ] FAIL
-- Local client status successful: [ ]
-- Remote official view confirmed: [ ]
-- Timestamp visible in remote view (UTC):
-- Observation:
+- Verification requested (UTC):
+- Agent visible in the `Verified by AI Worth Using` section: [ ]
+- Verification confirmed (UTC):
 - Redacted artifact reference:
 
 ## Live demos
@@ -87,7 +95,7 @@ known to contain no personal or secret information.
 
 ## Release sign-off
 
-- All six sections above are `PASS`: [ ]
+- All seven sections above are `PASS`: [ ]
 - Evidence reviewed for sensitive information: [ ]
 - `docs/hackathon-build/checklist.md` external gates updated: [ ]
 - Reviewer:

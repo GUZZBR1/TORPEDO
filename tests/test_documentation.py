@@ -37,6 +37,7 @@ class TestDocumentation(unittest.TestCase):
             "Plow Chat startup",
             "Mac/Latch reconnaissance",
             "Agent Index ingestion",
+            "Agent Index verification",
             "Public multi-step demo",
             "Authenticated portal demo",
             "Irreversible-boundary demo",

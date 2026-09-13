@@ -79,7 +79,7 @@ Publicação: commit de marco `778ebed1bd73c95d6a3856671f472419ef6337c6` enviado
 
 ## 2026-09-12 — Reauditoria documental e operacional
 
-A suíte atual possui 53 testes, todos aprovados em Linux/WSL. `compileall`,
+A suíte atual possui 54 testes, todos aprovados em Linux/WSL. `compileall`,
 `docker compose config --quiet`, a construção da imagem `scout:audit` e um
 smoke test de criação de missão dentro da imagem também foram aprovados. A
 execução pelo Python nativo do Windows não é um caminho suportado para a suíte
@@ -98,3 +98,31 @@ estacionada após falhas repetidas. Nenhum gate externo foi marcado: o próximo
 operador deve configurar o ID registrado, validar a credencial oficial e a
 conexão Mac/Latch, recriar o serviço e repetir o preflight documentado em
 `docs/OPERATIONS.md`.
+
+## 2026-09-12 — Requisitos atuais do Agent Index
+
+O quickstart oficial do `plow-agents` passou a indicar o Agent Index Client no
+commit `f900ff144076f0a766584b6ec4d0993600779b16`. O cliente foi baixado, teve o
+SHA-256 `633ad3bc24a51d6b7dcfaae319983ab174d9853a525237d99cac64878452560c`
+confirmado e passou em `--self-check`; o pin local foi atualizado.
+
+A página oficial do Agent Index informa que somente agentes MIT, reportando uso
+e aprovados na seção Verified podem concorrer. O repositório recebeu a licença
+MIT, e o gate de verificação foi acrescentado ao checklist. A página também
+informa que as solicitações de verificação começam em 14 de setembro de 2026.
+
+O primeiro boot após o registro revelou que `scout-scope/up` ainda usava
+sintaxe de script POSIX, embora arquivos `up` de serviços oneshot sejam
+interpretados pelo s6 como uma linha execline. O s6 tentou executar `set` como
+programa e marcou a inicialização como parcialmente falha. O serviço foi
+reduzido a uma única invocação absoluta de `/bin/rm -rf`, e o teste de
+empacotamento agora rejeita shebang e `set -eu` nesse contrato.
+
+O agente foi registrado como `scout` e ficou público em
+`https://aiworthusing.com/agent-index/scout`, com repositório, runtime e tutorial
+de instalação. O Compose agora usa esse ID público por padrão. Após a correção
+do oneshot, `scout-scope`, `plow-init` e `agent-index` iniciaram normalmente; o
+reporter enviou um dia e duas linhas de modelo e recebeu HTTP 200. O gate de
+registro/telemetria foi fechado com essa evidência. A conexão MCP do Plow ainda
+é estacionada após três tentativas, portanto o gate Mac/Latch e as demos reais
+continuam corretamente abertos.

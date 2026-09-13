@@ -75,7 +75,8 @@ Estes itens não impedem concluir todo o trabalho executável neste computador, 
 
 - [ ] Inicialização real do agente por Plow Chat com credenciais válidas.
 - [ ] Reconhecimento real em um Mac conectado ao Plow Latch.
-- [ ] Registro e telemetria confirmados no serviço Agent Index.
+- [x] Registro e telemetria confirmados no serviço Agent Index (`scout`, confirmado em 2026-09-13T01:15:23Z).
+- [ ] Agente aprovado na seção Verified do Agent Index (solicitações abrem em 14 de setembro de 2026).
 - [ ] Três demos reais: público, autenticado e fronteira irreversível.
 
 As evidências para fechar estes gates devem ser registradas em

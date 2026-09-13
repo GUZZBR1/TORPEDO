@@ -4,7 +4,7 @@ services:
     environment:
       # Register this exact id with the official client before expecting usage
       # reports. Empty makes the supervised reporter stand down safely.
-      AGENT_ID: ${AGENT_ID:-}
+      AGENT_ID: ${AGENT_ID:-scout}
     volumes:
       - ./plow-credentials:/var/lib/plow/credentials.host:ro
       - agent-home:/var/lib/hermes
@@ -12,4 +12,3 @@ services:
 
 volumes:
   agent-home:
-

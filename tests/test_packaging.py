@@ -10,6 +10,11 @@ SCOUT_SCOPE = ROOT / "image" / "s6-overlay" / "s6-rc.d" / "scout-scope"
 
 
 class TestPackaging(unittest.TestCase):
+    def test_hackathon_license_is_mit(self):
+        license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+        self.assertIn("MIT License", license_text)
+        self.assertIn("Permission is hereby granted", license_text)
+
     def test_agent_index_service_is_wired_after_plow_init(self):
         self.assertEqual("longrun", (SERVICE / "type").read_text().strip())
         self.assertTrue((SERVICE / "dependencies.d" / "plow-init").exists())
@@ -32,6 +37,7 @@ class TestPackaging(unittest.TestCase):
         self.assertIn("agent-home:/var/lib/hermes", compose)
         self.assertIn("credentials.host:ro", compose)
         self.assertIn("AGENT_ID", compose)
+        self.assertIn("AGENT_ID: ${AGENT_ID:-scout}", compose)
 
     def test_scout_persona_is_installed_after_base_bootstrap(self):
         dockerfile = (ROOT / "Dockerfile").read_text()
@@ -51,7 +57,10 @@ class TestPackaging(unittest.TestCase):
 
     def test_existing_homes_are_stripped_of_generic_productivity_skills_before_gateway(self):
         self.assertEqual("oneshot", (SCOUT_SCOPE / "type").read_text().strip())
-        cleanup = (SCOUT_SCOPE / "up").read_text()
+        cleanup = (SCOUT_SCOPE / "up").read_text().strip()
+        self.assertTrue(cleanup.startswith("/bin/rm -rf "))
+        self.assertNotIn("#!/bin/sh", cleanup)
+        self.assertNotIn("set -eu", cleanup)
         self.assertIn("/var/lib/hermes/skills/growth", cleanup)
         self.assertIn("/var/lib/hermes/skills/productivity", cleanup)
         self.assertTrue(
@@ -60,7 +69,6 @@ class TestPackaging(unittest.TestCase):
         self.assertTrue(
             (ROOT / "image" / "s6-overlay" / "s6-rc.d" / "user" / "contents.d" / "scout-scope").exists()
         )
-        subprocess.run(["sh", "-n", str(SCOUT_SCOPE / "up")], check=True)
 
     def test_persona_limits_scout_to_reconnaissance(self):
         persona = " ".join((ROOT / "runtime" / "persona.md").read_text(encoding="utf-8").split())
